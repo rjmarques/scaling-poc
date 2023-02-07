@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/gorilla/mux"
 )
 
 const (
@@ -28,6 +30,10 @@ type Instance struct {
 	HealthStatus   string
 }
 
+// global variables
+var mu sync.Mutex
+var store map[string]*Instance
+
 func main() {
 	asgClient, err := createASGlient(region)
 	if err != nil {
@@ -38,7 +44,9 @@ func main() {
 		panic(err)
 	}
 
-	store := map[string]*Instance{}
+	store = map[string]*Instance{}
+
+	go setupServer(asgClient)
 
 	for {
 		instances, err := getSlaveInstances(asgClient)
@@ -51,7 +59,7 @@ func main() {
 			fmt.Printf("instance %s is in state %s: %s\n", *inst.InstanceId, *inst.LifecycleState, *inst.HealthStatus)
 			id := *inst.InstanceId
 
-			instance := store[id]
+			instance := getInstance(id)
 			if instance == nil {
 				ip, err := getPrivateIP(inst.InstanceId, ec2)
 				if err != nil {
@@ -64,21 +72,14 @@ func main() {
 					LifecycleState: *inst.LifecycleState,
 					HealthStatus:   *inst.HealthStatus,
 				}
-				store[id] = instance
+
+				saveInstance(instance)
 			} else {
 				instance.LifecycleState = *inst.LifecycleState
 				instance.HealthStatus = *inst.HealthStatus
 			}
 
 			if instance.LifecycleState != "InService" || instance.HealthStatus != "Healthy" {
-				// confirm termination
-				// in a real world example, maybe some additinal work would be done at this stage
-				if instance.LifecycleState == "Terminating:Wait" {
-					err := confirmTermination(instance, asgClient)
-					if err != nil {
-						fmt.Println(err)
-					}
-				}
 				continue
 			}
 
@@ -97,6 +98,45 @@ func main() {
 		fmt.Println("")
 		time.Sleep(10 * time.Second)
 	}
+}
+
+func setupServer(asgClient *autoscaling.AutoScaling) {
+	r := mux.NewRouter()
+	r.HandleFunc("/confirm", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("confirming termination of any waiting instances")
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		confirmed := 0
+		for _, inst := range store {
+			// confirm termination
+			// in a real world example, maybe some additinal work would be done at this stage
+			if inst.LifecycleState == "Terminating:Wait" {
+				err := confirmTermination(inst, asgClient)
+				if err != nil {
+					fmt.Println(err)
+				}
+				confirmed++
+			}
+		}
+		w.Write([]byte(fmt.Sprintf("confirmed termination of %d instances", confirmed)))
+	})
+	panic(http.ListenAndServe(":8080", r))
+}
+
+func getInstance(id string) *Instance {
+	mu.Lock()
+	defer mu.Unlock()
+
+	return store[id]
+}
+
+func saveInstance(inst *Instance) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	store[inst.ID] = inst
 }
 
 func createASGlient(region string) (*autoscaling.AutoScaling, error) {
