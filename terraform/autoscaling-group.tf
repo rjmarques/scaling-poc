@@ -5,7 +5,7 @@ resource "aws_autoscaling_group" "ric-autoscaling-group" {
   health_check_grace_period = 30
   health_check_type         = "EC2"
   default_cooldown          = 240
-  default_instance_warmup   = 10
+  default_instance_warmup   = 1
   vpc_zone_identifier       = [local.subnet]
   launch_configuration      = aws_launch_configuration.scaling-launch-configuration.name
   tag {
