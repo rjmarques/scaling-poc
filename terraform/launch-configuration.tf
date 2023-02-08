@@ -18,6 +18,10 @@ resource "aws_launch_configuration" "scaling-launch-configuration" {
   associate_public_ip_address = "true"
   key_name                    = local.key_name
 
+  # this enable cloudwatch detailed monitoring which pushed instance metrics more often to Cloudwatch (for a small added price per instance)
+  # but insteac of 1 metric point per 5 minutes we get 1 per minute
+  enable_monitoring = true
+
   # create container at startup with latest slave image fro ECR
   user_data = <<EOF
 Content-Type: multipart/mixed; boundary="//"
