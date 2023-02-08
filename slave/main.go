@@ -11,8 +11,11 @@ import (
 )
 
 var activeStreesMode atomic.Bool
+var staticVersion = "V1.0.0"
 
 func main() {
+	fmt.Println("Running version:", staticVersion)
+
 	wakeChan := make(chan bool)
 
 	go cpuStressMode(wakeChan)

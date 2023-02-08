@@ -4,7 +4,7 @@ resource "aws_autoscaling_group" "ric-autoscaling-group" {
   min_size                  = 1
   health_check_grace_period = 30
   health_check_type         = "EC2"
-  default_cooldown          = 240
+  default_cooldown          = 1800 # 20 min
   default_instance_warmup   = 1
   vpc_zone_identifier       = [local.subnet]
   launch_configuration      = aws_launch_configuration.scaling-launch-configuration.name
@@ -40,9 +40,9 @@ resource "aws_autoscaling_policy" "poc-scale-out" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "scaling-high-cpu" {
-  alarm_name          = "ric-poc-high-cpu"
+  alarm_name          = "ric-scaling-high-cpu"
   comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = "1"
+  evaluation_periods  = "5"
   period              = "60"
   metric_name         = "CPUUtilization"
   namespace           = "AWS/EC2"
@@ -66,9 +66,9 @@ resource "aws_autoscaling_policy" "poc-scale-in" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "scaling-low-cpu" {
-  alarm_name          = "ric-poc-low-cpu"
+  alarm_name          = "ric-scaling-low-cpu"
   comparison_operator = "LessThanOrEqualToThreshold"
-  evaluation_periods  = "1"
+  evaluation_periods  = "5"
   period              = "60"
   metric_name         = "CPUUtilization"
   namespace           = "AWS/EC2"
